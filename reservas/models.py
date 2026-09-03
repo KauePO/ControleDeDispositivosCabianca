@@ -31,8 +31,8 @@ class TipoDispositivo(models.Model):
 class Dispositivo(models.Model):
     tipo = models.ForeignKey(TipoDispositivo, on_delete=models.PROTECT, related_name="dispositivos")
     categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True, related_name="dispositivos")
-    numero_patrimonio = models.CharField(max_length=80, unique=True)
-    numero_id = models.CharField(max_length=80, unique=True)
+    numero_patrimonio = models.CharField(max_length=80, unique=True, blank=True, null=True)
+    numero_id = models.CharField(max_length=80, unique=True, blank=True, null=True)
     ativo = models.BooleanField(default=True)
 
     class Meta:
@@ -41,7 +41,8 @@ class Dispositivo(models.Model):
         verbose_name_plural = "dispositivos"
 
     def __str__(self):
-        return f"{self.tipo} ({self.numero_patrimonio})"
+        identificacao = self.numero_patrimonio or self.numero_id or "sem identificação"
+        return f"{self.tipo} ({identificacao})"
 
 
 class Reserva(models.Model):

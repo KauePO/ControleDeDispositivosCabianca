@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
-from .models import Dispositivo, Reserva, TipoDispositivo
+from .models import Categoria, Dispositivo, Reserva, TipoDispositivo
 from .services import validar_itens
 
 
@@ -56,6 +56,11 @@ class DispositivoForm(forms.ModelForm):
     class Meta:
         model = Dispositivo
         fields = "__all__"
+
+
+class DispositivoFilterForm(forms.Form):
+    tipo = forms.ModelChoiceField(queryset=TipoDispositivo.objects.all(), required=False, empty_label="Todos os tipos", label="Tipo")
+    categoria = forms.ModelChoiceField(queryset=Categoria.objects.all(), required=False, empty_label="Todas as categorias", label="Categoria")
 
 
 class DashboardFilterForm(forms.Form):

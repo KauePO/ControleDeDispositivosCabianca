@@ -1,12 +1,14 @@
 from datetime import time
+from io import BytesIO
 
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import CadastroForm, DashboardFilterForm, DispositivoForm, ReservaForm
+from .forms import CadastroForm, DashboardFilterForm, DispositivoFilterForm, DispositivoForm, ReservaForm
 from .models import Dispositivo, ItemReserva, Reserva
 from .services import disponibilidade
 
@@ -94,8 +96,64 @@ def reserva_delete(request, pk):
 
 @login_required
 def dispositivo_list(request):
+    form = DispositivoFilterForm(request.GET or None)
+    dispositivos = dispositivos_filtrados(form)
+    resumo = resumo_dispositivos(dispositivos)
+    return render(request, "reservas/dispositivo_list.html", {"dispositivos": dispositivos, "form": form, "resumo": resumo})
+
+
+def dispositivos_filtrados(form):
     dispositivos = Dispositivo.objects.select_related("tipo", "categoria")
-    return render(request, "reservas/dispositivo_list.html", {"dispositivos": dispositivos})
+    if form.is_valid():
+        if form.cleaned_data.get("tipo"):
+            dispositivos = dispositivos.filter(tipo=form.cleaned_data["tipo"])
+        if form.cleaned_data.get("categoria"):
+            dispositivos = dispositivos.filter(categoria=form.cleaned_data["categoria"])
+    return dispositivos
+
+
+def resumo_dispositivos(dispositivos):
+    total = dispositivos.count()
+    ativo = dispositivos.filter(ativo=True).count()
+    return {"total": total, "ativo": ativo, "inativo": total - ativo}
+
+
+@login_required
+def dispositivo_export(request):
+    form = DispositivoFilterForm(request.GET or None)
+    dispositivos = dispositivos_filtrados(form)
+    resumo = resumo_dispositivos(dispositivos)
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Dispositivos"
+    sheet.append(["Total de dispositivos", resumo["total"]])
+    sheet.append(["Total ativo", resumo["ativo"]])
+    sheet.append(["Total inativo", resumo["inativo"]])
+    sheet.append([])
+    sheet.append(["Patrimônio", "Tipo", "Categoria", "ID", "Status"])
+    for dispositivo in dispositivos:
+        sheet.append([
+            dispositivo.numero_patrimonio or "",
+            dispositivo.tipo.nome,
+            dispositivo.categoria.nome if dispositivo.categoria else "",
+            dispositivo.numero_id or "",
+            "Ativo" if dispositivo.ativo else "Inativo",
+        ])
+    sheet.freeze_panes = "A6"
+    for column in sheet.columns:
+        width = max(len(str(cell.value or "")) for cell in column) + 2
+        sheet.column_dimensions[column[0].column_letter].width = min(width, 35)
+    output = BytesIO()
+    workbook.save(output)
+    response = HttpResponse(
+        output.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="dispositivos.xlsx"'
+    return response
 
 
 @login_required
@@ -108,3 +166,16 @@ def dispositivo_create(request):
         messages.success(request, "Dispositivo cadastrado.")
         return redirect("dispositivo_list")
     return render(request, "reservas/dispositivo_form.html", {"form": form})
+
+
+@login_required
+def dispositivo_update(request, pk):
+    if not request.user.is_staff:
+        return redirect("dashboard")
+    dispositivo = get_object_or_404(Dispositivo, pk=pk)
+    form = DispositivoForm(request.POST or None, instance=dispositivo)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Dispositivo atualizado.")
+        return redirect("dispositivo_list")
+    return render(request, "reservas/dispositivo_form.html", {"form": form, "titulo": "Editar dispositivo"})
