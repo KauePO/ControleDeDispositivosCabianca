@@ -3,6 +3,7 @@ from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from openpyxl import load_workbook
 
 from .models import Categoria, Dispositivo, ItemReserva, Reserva, TipoDispositivo
@@ -73,6 +74,17 @@ class DisponibilidadeTests(TestCase):
         self.client.force_login(self.usuario)
         resposta = self.client.get(f"/dispositivos/?categoria={categoria.pk}")
         self.assertEqual(resposta.context["resumo"], {"total": 1, "ativo": 0, "inativo": 1})
+
+    def test_dashboard_usa_data_atual_por_padrao(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.get("/")
+        self.assertEqual(resposta.context["data_selecionada"], timezone.localdate())
+        self.assertContains(resposta, timezone.localdate().strftime("%d"))
+
+    def test_navbar_nao_exibe_cadastro_de_dispositivo(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.get("/")
+        self.assertNotContains(resposta, "Cadastrar dispositivo")
 
     def test_admin_pode_editar_dispositivo_e_usuario_comum_nao(self):
         dispositivo = Dispositivo.objects.first()

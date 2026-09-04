@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from .forms import CadastroForm, DashboardFilterForm, DispositivoFilterForm, DispositivoForm, ReservaForm
 from .models import Dispositivo, ItemReserva, Reserva
@@ -26,7 +27,8 @@ def signup(request):
 
 
 def dashboard(request):
-    form = DashboardFilterForm(request.GET or None)
+    form_data = request.GET or {"data": timezone.localdate().isoformat()}
+    form = DashboardFilterForm(form_data)
     data = None
     hora_inicio, hora_fim = time.min, time.max
     if form.is_valid():
