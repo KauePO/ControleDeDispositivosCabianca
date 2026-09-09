@@ -1,6 +1,6 @@
-# ReservaLab
+# SITEC
 
-Sistema Django para controlar a disponibilidade e reserva de dispositivos de laboratórios por quantidade e faixa de horário.
+Sistema de Inventário de Tecnologia da Escola Cabianca para controlar a disponibilidade e reserva de dispositivos por quantidade e faixa de horário.
 
 ## Rodar localmente
 
