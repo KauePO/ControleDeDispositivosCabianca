@@ -1,17 +1,6 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
-from django.contrib.auth.models import User
-
 from .models import Categoria, Dispositivo, Reserva, TipoDispositivo
 from .services import validar_itens
-
-
-class CadastroForm(UserCreationForm):
-    email = forms.EmailField(required=False, label="E-mail")
-
-    class Meta:
-        model = User
-        fields = ("username", "email", "password1", "password2")
 
 
 class ReservaForm(forms.ModelForm):
