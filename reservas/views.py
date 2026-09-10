@@ -2,28 +2,15 @@ from datetime import time
 from io import BytesIO
 
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .forms import CadastroForm, DashboardFilterForm, DispositivoFilterForm, DispositivoForm, ReservaForm
+from .forms import DashboardFilterForm, DispositivoFilterForm, DispositivoForm, ReservaForm
 from .models import Dispositivo, ItemReserva, Reserva
 from .services import disponibilidade
-
-
-def signup(request):
-    if request.user.is_authenticated:
-        return redirect("dashboard")
-    form = CadastroForm(request.POST or None)
-    if form.is_valid():
-        usuario = form.save()
-        login(request, usuario)
-        messages.success(request, "Cadastro realizado com sucesso.")
-        return redirect("dashboard")
-    return render(request, "registration/signup.html", {"form": form})
 
 
 def dashboard(request):
