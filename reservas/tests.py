@@ -2,6 +2,7 @@ from datetime import date, time
 from io import BytesIO
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -46,6 +47,18 @@ class DisponibilidadeTests(TestCase):
         dispositivo = Dispositivo.objects.create(tipo=self.tipo)
         self.assertIsNone(dispositivo.numero_patrimonio)
         self.assertIsNone(dispositivo.numero_id)
+
+    def test_numero_id_pode_se_repetir_em_tipos_diferentes(self):
+        outro_tipo = TipoDispositivo.objects.create(nome="Notebook Laranja")
+        Dispositivo.objects.create(tipo=self.tipo, numero_id="10")
+        dispositivo = Dispositivo.objects.create(tipo=outro_tipo, numero_id="10")
+        self.assertEqual(dispositivo.numero_id, "10")
+
+    def test_numero_id_nao_pode_se_repetir_no_mesmo_tipo(self):
+        Dispositivo.objects.create(tipo=self.tipo, numero_id="10")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Dispositivo.objects.create(tipo=self.tipo, numero_id="10")
 
     def test_lista_filtra_por_tipo_e_exporta_planilha(self):
         outro_tipo = TipoDispositivo.objects.create(nome="Tablet")

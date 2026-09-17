@@ -32,11 +32,14 @@ class Dispositivo(models.Model):
     tipo = models.ForeignKey(TipoDispositivo, on_delete=models.PROTECT, related_name="dispositivos")
     categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True, related_name="dispositivos")
     numero_patrimonio = models.CharField(max_length=80, unique=True, blank=True, null=True)
-    numero_id = models.CharField(max_length=80, unique=True, blank=True, null=True)
+    numero_id = models.CharField(max_length=80, blank=True, null=True)
     ativo = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["tipo__nome", "numero_patrimonio"]
+        constraints = [
+            models.UniqueConstraint(fields=["tipo", "numero_id"], name="dispositivo_id_unico_por_tipo"),
+        ]
         verbose_name = "dispositivo"
         verbose_name_plural = "dispositivos"
 
