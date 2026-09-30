@@ -1,1 +1,35 @@
-{% extends 'base.html' %}{% block title %}{{ titulo }} | SITEC{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">AGENDA</p><h1>{{ titulo }}</h1></div></div><form method="post" class="panel form-layout">{% csrf_token %}{% for field in form %}<label class="{% if field.name|slice:':5' == 'tipo_' %}quantity{% endif %}">{{ field.label }}{{ field }}{% for error in field.errors %}<small class="error">{{ error }}</small>{% endfor %}</label>{% endfor %}{% for error in form.non_field_errors %}<p class="error">{{ error }}</p>{% endfor %}<div class="form-actions"><a href="{% url 'reserva_list' %}">Cancelar</a><button class="button primary">Salvar reserva</button></div></form>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}{{ titulo }} | SITEC{% endblock %}
+{% block content %}
+<style>
+	.time-picker { grid-column: 1 / -1; min-width: 0; border: 0; padding: 0; margin: 0; }
+	.time-picker legend { margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+	.time-help { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+	.time-options ul { display: flex; flex-wrap: wrap; gap: 9px; list-style: none; padding: 0; margin: 0; }
+	.time-options li { margin: 0; }
+	.time-options label { display: inline-flex; position: relative; align-items: center; border: 1px solid #cbd7ce; border-radius: 6px; background: #fff; color: var(--ink); padding: 10px 15px; cursor: pointer; font-size: 14px; }
+	.time-options label:hover { border-color: var(--green); }
+	.time-options label:has(input:checked) { border-color: var(--green); background: var(--green); color: #fff; }
+	.time-options input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+	.time-options label:focus-within { outline: 3px solid var(--mint); outline-offset: 2px; }
+	.time-picker .error { display: block; margin-top: 8px; }
+</style>
+<div class="page-head"><div><p class="eyebrow">AGENDA</p><h1>{{ titulo }}</h1></div></div>
+<form method="post" class="panel form-layout">
+	{% csrf_token %}
+	{% for field in form %}
+		{% if field.name == 'horarios' %}
+			<fieldset class="time-picker">
+				<legend>{{ field.label }}</legend>
+				<p class="time-help">Marque todos os horários do período, incluindo o início e o fim. Ex.: para reservar das 7:10 às 8:50, marque 7:10, 8:00 e 8:50.</p>
+				<div class="time-options">{{ field }}</div>
+				{% for error in field.errors %}<small class="error">{{ error }}</small>{% endfor %}
+			</fieldset>
+		{% else %}
+			<label class="{% if field.name|slice:':5' == 'tipo_' %}quantity{% endif %}">{{ field.label }}{{ field }}{% for error in field.errors %}<small class="error">{{ error }}</small>{% endfor %}</label>
+		{% endif %}
+	{% endfor %}
+	{% for error in form.non_field_errors %}<p class="error">{{ error }}</p>{% endfor %}
+	<div class="form-actions"><a href="{% url 'reserva_list' %}">Cancelar</a><button class="button primary">Salvar reserva</button></div>
+</form>
+{% endblock %}

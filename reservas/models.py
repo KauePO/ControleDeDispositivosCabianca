@@ -65,7 +65,7 @@ class Reserva(models.Model):
         verbose_name_plural = "reservas"
 
     def clean(self):
-        if self.hora_inicio >= self.hora_fim:
+        if self.hora_inicio and self.hora_fim and self.hora_inicio >= self.hora_fim:
             raise ValidationError({"hora_fim": "O horário final deve ser posterior ao inicial."})
 
     @property

@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 from openpyxl import load_workbook
 
+from .forms import ReservaForm
 from .models import Categoria, Dispositivo, ItemReserva, Reserva, TipoDispositivo
 from .services import disponibilidade, validar_itens
 
@@ -31,6 +32,88 @@ class DisponibilidadeTests(TestCase):
 
     def test_rejeita_excesso(self):
         self.assertIn(str(self.tipo.pk), validar_itens(date(2026, 8, 27), time(8), time(10), {self.tipo.pk: 4}))
+
+    def test_formulario_converte_selecao_multiplas_em_intervalo(self):
+        form = ReservaForm(data={
+            "data": "2026-08-27",
+            "horarios": ["08:50", "07:10", "08:00"],
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual((form.cleaned_data["hora_inicio"], form.cleaned_data["hora_fim"]), (time(7, 10), time(8, 50)))
+
+    def test_formulario_exige_no_minimo_dois_horarios(self):
+        form = ReservaForm(data={
+            "data": "2026-08-27",
+            "horarios": ["07:10"],
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("horarios", form.errors)
+
+    def test_formulario_rejeita_horarios_com_intervalo_pulado(self):
+        form = ReservaForm(data={
+            "data": "2026-08-27",
+            "horarios": ["07:10", "08:50"],
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("horarios", form.errors)
+
+    def test_formulario_rejeita_valor_de_horario_nao_permitido(self):
+        form = ReservaForm(data={
+            "data": "2026-08-27",
+            "horarios": ["07:10", "07:30"],
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("horarios", form.errors)
+
+    def test_tela_exibe_opcoes_multiplas_sem_campos_inicio_fim(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.get("/reservas/nova/")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'name="horarios"', count=9)
+        for horario in ("07:10", "08:00", "08:50", "09:55", "10:45", "11:35", "13:30", "14:20", "15:10"):
+            self.assertContains(resposta, f'value="{horario}"')
+        self.assertNotContains(resposta, 'name="hora_inicio"')
+        self.assertNotContains(resposta, 'name="hora_fim"')
+
+    def test_criacao_persiste_intervalo_e_disponibilidade_usa_selecao(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.post("/reservas/nova/", {
+            "data": "2026-08-27",
+            "horarios": ["07:10", "08:00", "08:50"],
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertRedirects(resposta, "/reservas/")
+        reserva = Reserva.objects.get(data=date(2026, 8, 27))
+        self.assertEqual((reserva.hora_inicio, reserva.hora_fim), (time(7, 10), time(8, 50)))
+        self.assertEqual(reserva.itens.get(tipo_dispositivo=self.tipo).quantidade, 1)
+        linha = disponibilidade(reserva.data, time(8, 45), time(8, 55), self.tipo)[0]
+        self.assertEqual(linha["reservado"], 1)
+        self.assertContains(self.client.get("/reservas/"), "07:10 - 08:50")
+
+    def test_edicao_preserva_horarios_legados_ate_alteracao_explicita(self):
+        reserva = Reserva.objects.create(
+            professor=self.usuario,
+            data=date(2026, 8, 27),
+            hora_inicio=time(7, 30),
+            hora_fim=time(9),
+        )
+        ItemReserva.objects.create(reserva=reserva, tipo_dispositivo=self.tipo, quantidade=1)
+        self.client.force_login(self.usuario)
+        resposta = self.client.get(f"/reservas/{reserva.pk}/editar/")
+        self.assertEqual(resposta.status_code, 200)
+        opcoes_iniciais = ["07:10", "08:00", "08:50", "09:55"]
+        resposta = self.client.post(f"/reservas/{reserva.pk}/editar/", {
+            "data": "2026-08-27",
+            "horarios": opcoes_iniciais,
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertRedirects(resposta, "/reservas/")
+        reserva.refresh_from_db()
+        self.assertEqual((reserva.hora_inicio, reserva.hora_fim), (time(7, 30), time(9)))
 
     def test_usuario_pode_se_cadastrar_e_entra_automaticamente(self):
         resposta = self.client.post("/cadastro/", {
