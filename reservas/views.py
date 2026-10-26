@@ -9,7 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .forms import DashboardFilterForm, DispositivoFilterForm, DispositivoForm, ReservaForm
-from .models import Dispositivo, ItemReserva, Reserva
+from .horarios import AULAS_POR_NUMERO
+from .models import AulaReserva, Dispositivo, ItemReserva, Reserva
 from .services import disponibilidade
 
 
@@ -20,20 +21,27 @@ def dashboard(request):
     hora_inicio, hora_fim = time.min, time.max
     if form.is_valid():
         data = form.cleaned_data.get("data")
+        aulas = form.cleaned_data.get("numeros_aulas") or list(AULAS_POR_NUMERO)
         hora_inicio = form.cleaned_data.get("hora_inicio") or time.min
         hora_fim = form.cleaned_data.get("hora_fim") or time.max
-        linhas = disponibilidade(data, hora_inicio, hora_fim, form.cleaned_data.get("tipo")) if data else []
+        linhas = disponibilidade(data, hora_inicio, hora_fim, form.cleaned_data.get("tipo"), aulas=aulas) if data else []
         categoria = form.cleaned_data.get("categoria")
         if categoria:
             linhas = [linha for linha in linhas if Dispositivo.objects.filter(tipo=linha["tipo"], categoria=categoria, ativo=True).exists()]
     else:
         linhas = []
-    return render(request, "reservas/dashboard.html", {"form": form, "linhas": linhas, "data_selecionada": data})
+    resumo = resumo_dispositivos(Dispositivo.objects.all())
+    return render(request, "reservas/dashboard.html", {
+        "form": form,
+        "linhas": linhas,
+        "data_selecionada": data,
+        "resumo_dispositivos": resumo,
+    })
 
 
 @login_required
 def reserva_list(request):
-    reservas = Reserva.objects.select_related("professor").prefetch_related("itens__tipo_dispositivo")
+    reservas = Reserva.objects.select_related("professor").prefetch_related("itens__tipo_dispositivo", "aulas")
     if not request.user.is_staff:
         reservas = reservas.filter(professor=request.user)
     return render(request, "reservas/reserva_list.html", {"reservas": reservas})
@@ -48,6 +56,7 @@ def reserva_create(request):
             reserva.professor = request.user
             reserva.save()
             ItemReserva.objects.bulk_create([ItemReserva(reserva=reserva, tipo_dispositivo_id=tipo_id, quantidade=quantidade) for tipo_id, quantidade in form.itens().items()])
+            AulaReserva.objects.bulk_create([AulaReserva(reserva=reserva, numero_aula=numero) for numero in form.numeros_aulas()])
         messages.success(request, "Reserva criada com sucesso.")
         return redirect("reserva_list")
     return render(request, "reservas/reserva_form.html", {"form": form, "titulo": "Nova reserva"})
@@ -65,6 +74,9 @@ def reserva_update(request, pk):
             reserva = form.save()
             reserva.itens.all().delete()
             ItemReserva.objects.bulk_create([ItemReserva(reserva=reserva, tipo_dispositivo_id=tipo_id, quantidade=quantidade) for tipo_id, quantidade in form.itens().items()])
+            if not form._preservar_intervalo_legado:
+                reserva.aulas.all().delete()
+                AulaReserva.objects.bulk_create([AulaReserva(reserva=reserva, numero_aula=numero) for numero in form.numeros_aulas()])
         messages.success(request, "Reserva atualizada com sucesso.")
         return redirect("reserva_list")
     return render(request, "reservas/reserva_form.html", {"form": form, "titulo": "Editar reserva"})

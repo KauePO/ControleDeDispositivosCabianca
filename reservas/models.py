@@ -2,6 +2,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from .horarios import AULAS_CHOICES, AULAS_POR_NUMERO
+
 
 class Categoria(models.Model):
     nome = models.CharField(max_length=80, unique=True)
@@ -72,6 +74,13 @@ class Reserva(models.Model):
     def professor_exibicao(self):
         return self.nome_professor or self.professor.get_full_name() or self.professor.username
 
+    @property
+    def aulas_exibicao(self):
+        aulas = list(self.aulas.all())
+        if aulas:
+            return [AULAS_POR_NUMERO[aula.numero_aula] for aula in aulas]
+        return []
+
     def __str__(self):
         return f"{self.data:%d/%m/%Y} - {self.professor_exibicao}"
 
@@ -88,3 +97,19 @@ class ItemReserva(models.Model):
         ]
         verbose_name = "item de reserva"
         verbose_name_plural = "itens de reserva"
+
+
+class AulaReserva(models.Model):
+    reserva = models.ForeignKey(Reserva, on_delete=models.CASCADE, related_name="aulas")
+    numero_aula = models.PositiveSmallIntegerField(choices=AULAS_CHOICES)
+
+    class Meta:
+        ordering = ["numero_aula"]
+        constraints = [
+            models.UniqueConstraint(fields=["reserva", "numero_aula"], name="aula_unica_por_reserva"),
+        ]
+        verbose_name = "aula reservada"
+        verbose_name_plural = "aulas reservadas"
+
+    def __str__(self):
+        return dict(AULAS_CHOICES)[self.numero_aula]

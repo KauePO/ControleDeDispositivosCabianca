@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Categoria, Dispositivo, ItemReserva, Reserva, TipoDispositivo
+from .models import AulaReserva, Categoria, Dispositivo, ItemReserva, Reserva, TipoDispositivo
 
 
 @admin.register(Categoria, TipoDispositivo)
@@ -21,8 +21,20 @@ class ItemReservaInline(admin.TabularInline):
     extra = 0
 
 
+class AulaReservaInline(admin.TabularInline):
+    model = AulaReserva
+    extra = 0
+
+
 @admin.register(Reserva)
 class ReservaAdmin(admin.ModelAdmin):
-    list_display = ("data", "hora_inicio", "hora_fim", "professor_exibicao")
+    list_display = ("data", "aulas_reservadas", "professor_exibicao")
     list_filter = ("data",)
-    inlines = (ItemReservaInline,)
+    inlines = (AulaReservaInline, ItemReservaInline)
+
+    @admin.display(description="Aulas / horário")
+    def aulas_reservadas(self, reserva):
+        aulas = reserva.aulas_exibicao
+        if aulas:
+            return ", ".join(aula["nome"] for aula in aulas)
+        return f"{reserva.hora_inicio:%H:%M}–{reserva.hora_fim:%H:%M} (legada)"

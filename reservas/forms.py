@@ -1,27 +1,15 @@
-from datetime import time
-
 from django import forms
+from .horarios import AULAS_CHOICES, AULAS_POR_NUMERO, aulas_que_sobrepoem
 from .models import Categoria, Dispositivo, Reserva, TipoDispositivo
 from .services import validar_itens
 
 
 class ReservaForm(forms.ModelForm):
-    OPCOES_HORARIO = (
-        ("07:10", "7:10"),
-        ("08:00", "8:00"),
-        ("08:50", "8:50"),
-        ("09:55", "9:55"),
-        ("10:45", "10:45"),
-        ("11:35", "11:35"),
-        ("13:30", "13:30"),
-        ("14:20", "14:20"),
-        ("15:10", "15:10"),
-    )
-    horarios = forms.MultipleChoiceField(
-        label="Horários",
-        choices=OPCOES_HORARIO,
+    aulas = forms.MultipleChoiceField(
+        label="Aulas",
+        choices=AULAS_CHOICES,
         widget=forms.CheckboxSelectMultiple,
-        error_messages={"required": "Selecione ao menos dois horários."},
+        error_messages={"required": "Selecione pelo menos uma aula."},
     )
 
     class Meta:
@@ -34,22 +22,20 @@ class ReservaForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._horarios_iniciais = []
-        self._horario_original = None
+        self._aulas_iniciais = []
+        self._intervalo_original = None
+        self._preservar_intervalo_legado = False
         if self.instance.pk:
-            opcoes = [valor for valor, _ in self.OPCOES_HORARIO]
-            inicio = self.instance.hora_inicio.strftime("%H:%M")
-            fim = self.instance.hora_fim.strftime("%H:%M")
-            inicio_index = max((i for i, valor in enumerate(opcoes) if valor <= inicio), default=0)
-            fim_index = min((i for i, valor in enumerate(opcoes) if valor >= fim), default=len(opcoes) - 1)
-            if fim_index <= inicio_index:
-                if inicio_index == len(opcoes) - 1:
-                    inicio_index -= 1
-                else:
-                    fim_index = inicio_index + 1
-            self._horarios_iniciais = opcoes[inicio_index:fim_index + 1]
-            self._horario_original = (self.instance.hora_inicio, self.instance.hora_fim)
-            self.initial["horarios"] = self._horarios_iniciais
+            aulas_salvas = list(self.instance.aulas.values_list("numero_aula", flat=True))
+            if aulas_salvas:
+                self._aulas_iniciais = [str(numero) for numero in aulas_salvas]
+            else:
+                self._aulas_iniciais = [
+                    str(numero)
+                    for numero in aulas_que_sobrepoem(self.instance.hora_inicio, self.instance.hora_fim)
+                ]
+            self._intervalo_original = (self.instance.hora_inicio, self.instance.hora_fim)
+            self.initial["aulas"] = self._aulas_iniciais
 
         existentes = {item.tipo_dispositivo_id: item.quantidade for item in self.instance.itens.all()} if self.instance.pk else {}
         for tipo in TipoDispositivo.objects.all():
@@ -59,33 +45,30 @@ class ReservaForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        selecionados = cleaned.get("horarios", [])
-        if len(selecionados) < 2:
-            if "horarios" not in self.errors:
-                self.add_error("horarios", "Selecione pelo menos dois horários para definir o período.")
+        selecionados = cleaned.get("aulas", [])
+        if not selecionados:
+            if "aulas" not in self.errors:
+                self.add_error("aulas", "Selecione pelo menos uma aula para reservar.")
             return cleaned
 
-        ordem = [valor for valor, _ in self.OPCOES_HORARIO]
-        indices = sorted(ordem.index(valor) for valor in selecionados)
-        if indices != list(range(indices[0], indices[-1] + 1)):
-            self.add_error("horarios", "Selecione horários consecutivos para formar um período contínuo.")
-            return cleaned
-
-        selecionados_ordenados = [ordem[indice] for indice in indices]
-        if self._horario_original and selecionados_ordenados == self._horarios_iniciais:
-            hora_inicio, hora_fim = self._horario_original
+        numeros_aulas = sorted(int(numero) for numero in selecionados)
+        if self._intervalo_original and [str(numero) for numero in numeros_aulas] == self._aulas_iniciais:
+            hora_inicio, hora_fim = self._intervalo_original
+            self._preservar_intervalo_legado = not self.instance.aulas.exists()
         else:
-            hora_inicio = time.fromisoformat(selecionados_ordenados[0])
-            hora_fim = time.fromisoformat(selecionados_ordenados[-1])
+            primeira_aula = AULAS_POR_NUMERO[numeros_aulas[0]]
+            ultima_aula = AULAS_POR_NUMERO[numeros_aulas[-1]]
+            hora_inicio, hora_fim = primeira_aula["inicio"], ultima_aula["fim"]
         cleaned["hora_inicio"] = hora_inicio
         cleaned["hora_fim"] = hora_fim
+        cleaned["numeros_aulas"] = numeros_aulas
         self.instance.hora_inicio = hora_inicio
         self.instance.hora_fim = hora_fim
         if not cleaned.get("data"):
             return cleaned
 
         itens = {int(nome.split("_")[1]): valor for nome, valor in self.cleaned_data.items() if nome.startswith("tipo_") and valor}
-        erros = validar_itens(cleaned["data"], hora_inicio, hora_fim, itens, self.instance.pk)
+        erros = validar_itens(cleaned["data"], hora_inicio, hora_fim, itens, self.instance.pk, numeros_aulas)
         for chave, mensagem in erros.items():
             if chave != "__all__":
                 self.add_error(f"tipo_{chave}", mensagem)
@@ -97,6 +80,9 @@ class ReservaForm(forms.ModelForm):
 
     def itens(self):
         return {int(nome.split("_")[1]): valor for nome, valor in self.cleaned_data.items() if nome.startswith("tipo_") and valor}
+
+    def numeros_aulas(self):
+        return self.cleaned_data["numeros_aulas"]
 
 
 class DispositivoForm(forms.ModelForm):
@@ -112,8 +98,12 @@ class DispositivoFilterForm(forms.Form):
 
 class DashboardFilterForm(forms.Form):
     data = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
-    hora_inicio = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"type": "time"}))
-    hora_fim = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"type": "time"}))
+    aulas = forms.MultipleChoiceField(
+        label="Aulas",
+        choices=AULAS_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
     tipo = forms.ModelChoiceField(queryset=TipoDispositivo.objects.all(), required=False, empty_label="Todos os tipos")
     categoria = forms.ModelChoiceField(queryset=Dispositivo.objects.none(), required=False, empty_label="Todas as categorias")
 
@@ -124,8 +114,10 @@ class DashboardFilterForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        if bool(cleaned.get("hora_inicio")) != bool(cleaned.get("hora_fim")):
-            raise forms.ValidationError("Informe os dois horários para filtrar um intervalo.")
-        if cleaned.get("hora_inicio") and cleaned["hora_inicio"] >= cleaned["hora_fim"]:
-            raise forms.ValidationError("O horário final deve ser posterior ao inicial.")
+        selecionados = cleaned.get("aulas", [])
+        if selecionados:
+            numeros_aulas = sorted(int(numero) for numero in selecionados)
+            cleaned["numeros_aulas"] = numeros_aulas
+            cleaned["hora_inicio"] = AULAS_POR_NUMERO[numeros_aulas[0]]["inicio"]
+            cleaned["hora_fim"] = AULAS_POR_NUMERO[numeros_aulas[-1]]["fim"]
         return cleaned

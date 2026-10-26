@@ -1,1 +1,32 @@
-{% extends 'base.html' %}{% block title %}Reservas | SITEC{% endblock %}{% block content %}<div class="page-head"><div><p class="eyebrow">AGENDA</p><h1>Reservas</h1><p class="muted">{{ reservas|length }} reserva(s) cadastrada(s).</p></div><a class="button primary" href="{% url 'reserva_create' %}">+ Nova reserva</a></div><div class="table-wrap panel"><table><thead><tr><th>Data e horário</th><th>Professor</th><th>Equipamentos</th><th>Ações</th></tr></thead><tbody>{% for reserva in reservas %}<tr><td><strong>{{ reserva.data|date:'d/m/Y' }}</strong><small>{{ reserva.hora_inicio|time:'H:i' }} - {{ reserva.hora_fim|time:'H:i' }}</small></td><td>{{ reserva.professor_exibicao }}</td><td>{% for item in reserva.itens.all %}<span class="tag">{{ item.quantidade }}x {{ item.tipo_dispositivo.nome }}</span>{% empty %}-{% endfor %}</td><td class="actions"><a href="{% url 'reserva_update' reserva.pk %}">Editar</a><a href="{% url 'reserva_delete' reserva.pk %}">Excluir</a></td></tr>{% empty %}<tr><td colspan="4" class="empty-state">Nenhuma reserva cadastrada.</td></tr>{% endfor %}</tbody></table></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Reservas | SITEC{% endblock %}
+{% block content %}
+<style>
+	.lesson-tag { display: inline-flex; margin: 2px 4px 2px 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: #f7f9f5; color: var(--ink); font-size: 12px; white-space: nowrap; }
+	.reservation-items { min-width: 180px; }
+	@media (max-width: 640px) { .reservation-items { min-width: 140px; } }
+</style>
+<div class="page-head">
+	<div><p class="eyebrow">AGENDA</p><h1>Reservas</h1><p class="muted">{{ reservas|length }} reserva(s) cadastrada(s).</p></div>
+	<a class="button primary" href="{% url 'reserva_create' %}">+ Nova reserva</a>
+</div>
+<div class="table-wrap panel">
+	<table>
+		<thead><tr><th>Data e aulas</th><th>Professor</th><th>Equipamentos</th><th>Ações</th></tr></thead>
+		<tbody>
+			{% for reserva in reservas %}
+				<tr>
+					<td><strong>{{ reserva.data|date:'d/m/Y' }}</strong><div class="reservation-items">
+						{% if reserva.aulas_exibicao %}
+							{% for aula in reserva.aulas_exibicao %}<span class="lesson-tag">{{ aula.nome }} · {{ aula.inicio|time:'H:i' }}–{{ aula.fim|time:'H:i' }}</span>{% endfor %}
+						{% else %}<span class="lesson-tag">{{ reserva.hora_inicio|time:'H:i' }}–{{ reserva.hora_fim|time:'H:i' }}</span>{% endif %}
+					</div></td>
+					<td>{{ reserva.professor_exibicao }}</td>
+					<td>{% for item in reserva.itens.all %}<span class="tag">{{ item.quantidade }}x {{ item.tipo_dispositivo.nome }}</span>{% empty %}-{% endfor %}</td>
+					<td class="actions"><a href="{% url 'reserva_update' reserva.pk %}">Editar</a><a href="{% url 'reserva_delete' reserva.pk %}">Excluir</a></td>
+				</tr>
+			{% empty %}<tr><td colspan="4" class="empty-state">Nenhuma reserva cadastrada.</td></tr>{% endfor %}
+		</tbody>
+	</table>
+</div>
+{% endblock %}

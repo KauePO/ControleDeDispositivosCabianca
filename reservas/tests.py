@@ -7,8 +7,9 @@ from django.test import TestCase
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from .forms import ReservaForm
-from .models import Categoria, Dispositivo, ItemReserva, Reserva, TipoDispositivo
+from .forms import DashboardFilterForm, ReservaForm
+from .horarios import AULAS
+from .models import AulaReserva, Categoria, Dispositivo, ItemReserva, Reserva, TipoDispositivo
 from .services import disponibilidade, validar_itens
 
 
@@ -25,6 +26,33 @@ class DisponibilidadeTests(TestCase):
         linha = disponibilidade(date(2026, 8, 27), time(9), time(11), self.tipo)[0]
         self.assertEqual((linha["total"], linha["reservado"], linha["disponivel"]), (3, 2, 1))
 
+    def test_grade_escolar_contem_nove_aulas_com_limites_corretos(self):
+        intervalos = [(aula["inicio"], aula["fim"]) for aula in AULAS]
+        self.assertEqual(intervalos, [
+            (time(7, 10), time(8, 0)),
+            (time(8, 0), time(8, 50)),
+            (time(8, 50), time(9, 40)),
+            (time(9, 55), time(10, 45)),
+            (time(10, 45), time(11, 35)),
+            (time(11, 35), time(12, 25)),
+            (time(13, 30), time(14, 20)),
+            (time(14, 20), time(15, 10)),
+            (time(15, 10), time(16, 0)),
+        ])
+
+    def test_consulta_do_dia_inteiro_nao_soma_aulas_sequenciais(self):
+        for numero in (1, 2):
+            reserva = Reserva.objects.create(
+                professor=self.usuario,
+                data=date(2026, 8, 27),
+                hora_inicio=AULAS[numero - 1]["inicio"],
+                hora_fim=AULAS[numero - 1]["fim"],
+            )
+            AulaReserva.objects.create(reserva=reserva, numero_aula=numero)
+            ItemReserva.objects.create(reserva=reserva, tipo_dispositivo=self.tipo, quantidade=2)
+        linha = disponibilidade(date(2026, 8, 27), time.min, time.max, self.tipo, aulas=list(range(1, 10)))[0]
+        self.assertEqual((linha["total"], linha["reservado"], linha["disponivel"]), (3, 2, 1))
+
     def test_edicao_exclui_a_propria_reserva_do_calculo(self):
         reserva = Reserva.objects.create(professor=self.usuario, data=date(2026, 8, 27), hora_inicio=time(8), hora_fim=time(10))
         ItemReserva.objects.create(reserva=reserva, tipo_dispositivo=self.tipo, quantidade=3)
@@ -33,49 +61,52 @@ class DisponibilidadeTests(TestCase):
     def test_rejeita_excesso(self):
         self.assertIn(str(self.tipo.pk), validar_itens(date(2026, 8, 27), time(8), time(10), {self.tipo.pk: 4}))
 
-    def test_formulario_converte_selecao_multiplas_em_intervalo(self):
+    def test_formulario_converte_aulas_selecionadas_em_intervalo_compatibilidade(self):
         form = ReservaForm(data={
             "data": "2026-08-27",
-            "horarios": ["08:50", "07:10", "08:00"],
+            "aulas": ["3", "1", "2"],
             f"tipo_{self.tipo.pk}": "1",
         })
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual((form.cleaned_data["hora_inicio"], form.cleaned_data["hora_fim"]), (time(7, 10), time(8, 50)))
+        self.assertEqual((form.cleaned_data["hora_inicio"], form.cleaned_data["hora_fim"]), (time(7, 10), time(9, 40)))
+        self.assertEqual(form.cleaned_data["numeros_aulas"], [1, 2, 3])
 
-    def test_formulario_exige_no_minimo_dois_horarios(self):
+    def test_formulario_exige_ao_menos_uma_aula(self):
         form = ReservaForm(data={
             "data": "2026-08-27",
-            "horarios": ["07:10"],
+            "aulas": [],
             f"tipo_{self.tipo.pk}": "1",
         })
         self.assertFalse(form.is_valid())
-        self.assertIn("horarios", form.errors)
+        self.assertIn("aulas", form.errors)
 
-    def test_formulario_rejeita_horarios_com_intervalo_pulado(self):
+    def test_formulario_aceita_aulas_nao_consecutivas(self):
         form = ReservaForm(data={
             "data": "2026-08-27",
-            "horarios": ["07:10", "08:50"],
+            "aulas": ["1", "3"],
+            f"tipo_{self.tipo.pk}": "1",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["numeros_aulas"], [1, 3])
+
+    def test_formulario_rejeita_valor_de_aula_nao_permitido(self):
+        form = ReservaForm(data={
+            "data": "2026-08-27",
+            "aulas": ["1", "10"],
             f"tipo_{self.tipo.pk}": "1",
         })
         self.assertFalse(form.is_valid())
-        self.assertIn("horarios", form.errors)
-
-    def test_formulario_rejeita_valor_de_horario_nao_permitido(self):
-        form = ReservaForm(data={
-            "data": "2026-08-27",
-            "horarios": ["07:10", "07:30"],
-            f"tipo_{self.tipo.pk}": "1",
-        })
-        self.assertFalse(form.is_valid())
-        self.assertIn("horarios", form.errors)
+        self.assertIn("aulas", form.errors)
 
     def test_tela_exibe_opcoes_multiplas_sem_campos_inicio_fim(self):
         self.client.force_login(self.usuario)
         resposta = self.client.get("/reservas/nova/")
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, 'name="horarios"', count=9)
-        for horario in ("07:10", "08:00", "08:50", "09:55", "10:45", "11:35", "13:30", "14:20", "15:10"):
-            self.assertContains(resposta, f'value="{horario}"')
+        self.assertContains(resposta, 'name="aulas"', count=9)
+        for numero in range(1, 10):
+            self.assertContains(resposta, f'value="{numero}"')
+        for intervalo in ("07:10–08:00", "08:50–09:40", "09:55–10:45", "11:35–12:25", "15:10–16:00"):
+            self.assertContains(resposta, intervalo)
         self.assertNotContains(resposta, 'name="hora_inicio"')
         self.assertNotContains(resposta, 'name="hora_fim"')
 
@@ -83,16 +114,19 @@ class DisponibilidadeTests(TestCase):
         self.client.force_login(self.usuario)
         resposta = self.client.post("/reservas/nova/", {
             "data": "2026-08-27",
-            "horarios": ["07:10", "08:00", "08:50"],
+            "aulas": ["1", "3"],
             f"tipo_{self.tipo.pk}": "1",
         })
         self.assertRedirects(resposta, "/reservas/")
         reserva = Reserva.objects.get(data=date(2026, 8, 27))
-        self.assertEqual((reserva.hora_inicio, reserva.hora_fim), (time(7, 10), time(8, 50)))
+        self.assertEqual((reserva.hora_inicio, reserva.hora_fim), (time(7, 10), time(9, 40)))
+        self.assertEqual(list(reserva.aulas.values_list("numero_aula", flat=True)), [1, 3])
         self.assertEqual(reserva.itens.get(tipo_dispositivo=self.tipo).quantidade, 1)
-        linha = disponibilidade(reserva.data, time(8, 45), time(8, 55), self.tipo)[0]
+        linha = disponibilidade(reserva.data, time(8, 50), time(9, 40), self.tipo, aulas=[2])[0]
+        self.assertEqual(linha["reservado"], 0)
+        linha = disponibilidade(reserva.data, time(8, 50), time(9, 40), self.tipo, aulas=[3])[0]
         self.assertEqual(linha["reservado"], 1)
-        self.assertContains(self.client.get("/reservas/"), "07:10 - 08:50")
+        self.assertContains(self.client.get("/reservas/"), "3ª aula · 08:50–09:40")
 
     def test_edicao_preserva_horarios_legados_ate_alteracao_explicita(self):
         reserva = Reserva.objects.create(
@@ -105,10 +139,10 @@ class DisponibilidadeTests(TestCase):
         self.client.force_login(self.usuario)
         resposta = self.client.get(f"/reservas/{reserva.pk}/editar/")
         self.assertEqual(resposta.status_code, 200)
-        opcoes_iniciais = ["07:10", "08:00", "08:50", "09:55"]
+        opcoes_iniciais = ["1", "2", "3"]
         resposta = self.client.post(f"/reservas/{reserva.pk}/editar/", {
             "data": "2026-08-27",
-            "horarios": opcoes_iniciais,
+            "aulas": opcoes_iniciais,
             f"tipo_{self.tipo.pk}": "1",
         })
         self.assertRedirects(resposta, "/reservas/")
@@ -176,6 +210,55 @@ class DisponibilidadeTests(TestCase):
         resposta = self.client.get("/")
         self.assertEqual(resposta.context["data_selecionada"], timezone.localdate())
         self.assertContains(resposta, timezone.localdate().strftime("%d"))
+
+    def test_dashboard_exibe_resumo_de_dispositivos_para_visitantes(self):
+        Dispositivo.objects.create(tipo=self.tipo, numero_patrimonio="INATIVO", ativo=False)
+
+        resposta = self.client.get("/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["resumo_dispositivos"], {"total": 4, "ativo": 3, "inativo": 1})
+        self.assertContains(resposta, "Dispositivos disponíveis na escola")
+        self.assertContains(resposta, "Total de dispositivos")
+        self.assertLess(
+            resposta.content.index(b"<section class=\"public-device-summary\""),
+            resposta.content.index(b"<form method=\"get\" class=\"panel dashboard-filters\""),
+        )
+
+    def test_dashboard_mostra_horarios_predefinidos_sem_hora_inicio_fim(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.get("/")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'name="aulas"', count=9)
+        for numero in range(1, 10):
+            self.assertContains(resposta, f'value="{numero}"')
+        self.assertNotContains(resposta, 'name="hora_inicio"')
+        self.assertNotContains(resposta, 'name="hora_fim"')
+
+    def test_dashboard_filtra_disponibilidade_pelo_intervalo_selecionado(self):
+        reserva = Reserva.objects.create(
+            professor=self.usuario,
+            data=date(2026, 8, 27),
+            hora_inicio=time(8),
+            hora_fim=time(9),
+        )
+        ItemReserva.objects.create(reserva=reserva, tipo_dispositivo=self.tipo, quantidade=2)
+        resposta = self.client.get("/", {
+            "data": "2026-08-27",
+            "aulas": ["2"],
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.context["form"].is_valid())
+        self.assertEqual(resposta.context["linhas"][0]["reservado"], 2)
+        self.assertEqual(resposta.context["linhas"][0]["disponivel"], 1)
+
+    def test_filtro_dashboard_rejeita_aula_inexistente(self):
+        form = DashboardFilterForm(data={
+            "data": "2026-08-27",
+            "aulas": ["10"],
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("aulas", form.errors)
 
     def test_navbar_nao_exibe_cadastro_de_dispositivo(self):
         self.client.force_login(self.usuario)

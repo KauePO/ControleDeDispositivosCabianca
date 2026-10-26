@@ -4,10 +4,10 @@
 <style>
 	.time-picker { grid-column: 1 / -1; min-width: 0; border: 0; padding: 0; margin: 0; }
 	.time-picker legend { margin-bottom: 8px; color: var(--ink); font: 600 16px 'Space Grotesk', sans-serif; }
-	.time-help { max-width: 620px; margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.6; }
-	.time-options > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; max-width: 540px; }
+	.time-help { max-width: 720px; margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+	.time-options > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; max-width: 720px; }
 	.time-options > div > div { min-width: 0; }
-	.time-options label { display: flex; position: relative; align-items: center; justify-content: center; min-height: 52px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; font-size: 15px; font-weight: 700; transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
+	.time-options label { display: flex; position: relative; align-items: center; justify-content: center; min-height: 58px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; font-size: 14px; font-weight: 700; text-align: center; transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
 	.time-options label:hover { transform: translateY(-1px); border-color: var(--green); box-shadow: 0 3px 10px rgb(23 107 76 / 10%); }
 	.time-options label:has(input:checked) { border-color: var(--green); background: var(--green); color: #fff; box-shadow: 0 3px 10px rgb(23 107 76 / 18%); }
 	.time-options label:has(input:checked)::after { position: absolute; top: 5px; right: 7px; content: '✓'; font-size: 11px; }
@@ -20,10 +20,10 @@
 <form method="post" class="panel form-layout">
 	{% csrf_token %}
 	{% for field in form %}
-		{% if field.name == 'horarios' %}
+		{% if field.name == 'aulas' %}
 			<fieldset class="time-picker">
 				<legend>{{ field.label }}</legend>
-				<p class="time-help">Marque todos os horários do período, incluindo o início e o fim. Ex.: para reservar das 7:10 às 8:50, marque 7:10, 8:00 e 8:50.</p>
+				<p class="time-help">Selecione uma ou mais aulas. Cada aula corresponde ao intervalo exibido no botão; aulas descontínuas reservam somente os períodos marcados.</p>
 				<div class="time-options">{{ field }}</div>
 				{% for error in field.errors %}<small class="error">{{ error }}</small>{% endfor %}
 			</fieldset>
