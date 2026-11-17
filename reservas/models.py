@@ -30,12 +30,15 @@ class TipoDispositivo(models.Model):
         return self.nome
 
 
+
 class Dispositivo(models.Model):
     tipo = models.ForeignKey(TipoDispositivo, on_delete=models.PROTECT, related_name="dispositivos")
     categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True, related_name="dispositivos")
     numero_patrimonio = models.CharField(max_length=80, unique=True, blank=True, null=True)
     numero_id = models.CharField(max_length=80, blank=True, null=True)
     ativo = models.BooleanField(default=True)
+    observacao = models.BooleanField(default=False, verbose_name="Observação (laranja)")
+    comentarios = models.TextField(blank=True, verbose_name="Comentários")
 
     class Meta:
         ordering = ["tipo__nome", "numero_patrimonio"]

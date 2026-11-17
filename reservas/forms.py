@@ -85,10 +85,14 @@ class ReservaForm(forms.ModelForm):
         return self.cleaned_data["numeros_aulas"]
 
 
+
 class DispositivoForm(forms.ModelForm):
     class Meta:
         model = Dispositivo
         fields = "__all__"
+        widgets = {
+            "comentarios": forms.Textarea(attrs={"rows": 2, "placeholder": "Adicione comentários relevantes sobre o dispositivo"}),
+        }
 
 
 class DispositivoFilterForm(forms.Form):

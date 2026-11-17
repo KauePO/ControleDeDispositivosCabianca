@@ -180,19 +180,26 @@ class DisponibilidadeTests(TestCase):
     def test_lista_filtra_por_tipo_e_exporta_planilha(self):
         outro_tipo = TipoDispositivo.objects.create(nome="Tablet")
         Dispositivo.objects.create(tipo=outro_tipo, numero_patrimonio="T-1")
+        observado = Dispositivo.objects.get(numero_patrimonio="P0")
+        observado.observacao = True
+        observado.comentarios = "Tela trincada"
+        observado.save()
         usuario = self.usuario
         self.client.force_login(usuario)
         lista = self.client.get(f"/dispositivos/?tipo={self.tipo.pk}")
         self.assertEqual(lista.status_code, 200)
         self.assertEqual(len(lista.context["dispositivos"]), 3)
+        self.assertContains(lista, "Observação")
+        self.assertContains(lista, "Tela trincada")
         resposta = self.client.get(f"/dispositivos/exportar/?tipo={self.tipo.pk}")
         self.assertEqual(resposta.status_code, 200)
         workbook = load_workbook(BytesIO(resposta.content))
         valores = list(workbook.active.values)
-        self.assertEqual(valores[0], ("Total de dispositivos", 3, None, None, None))
-        self.assertEqual(valores[1], ("Total ativo", 3, None, None, None))
-        self.assertEqual(valores[2], ("Total inativo", 0, None, None, None))
-        self.assertEqual(valores[4], ("Patrimônio", "Tipo", "Categoria", "ID", "Status"))
+        self.assertEqual(valores[0], ("Total de dispositivos", 3, None, None, None, None, None))
+        self.assertEqual(valores[1], ("Total ativo", 3, None, None, None, None, None))
+        self.assertEqual(valores[2], ("Total inativo", 0, None, None, None, None, None))
+        self.assertEqual(valores[4], ("Patrimônio", "Tipo", "Categoria", "ID", "Status", "Observação", "Comentários"))
+        self.assertEqual(valores[5][5:], ("Observação", "Tela trincada"))
         self.assertTrue(all(linha[1] == self.tipo.nome for linha in valores[5:]))
 
     def test_painel_reflete_filtro_de_categoria(self):

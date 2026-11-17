@@ -11,9 +11,9 @@ class CatalogoAdmin(admin.ModelAdmin):
 
 @admin.register(Dispositivo)
 class DispositivoAdmin(admin.ModelAdmin):
-    list_display = ("numero_patrimonio", "tipo", "categoria", "ativo")
-    list_filter = ("tipo", "categoria", "ativo")
-    search_fields = ("numero_patrimonio", "numero_id")
+    list_display = ("numero_patrimonio", "tipo", "categoria", "ativo", "observacao")
+    list_filter = ("tipo", "categoria", "ativo", "observacao")
+    search_fields = ("numero_patrimonio", "numero_id", "comentarios")
 
 
 class ItemReservaInline(admin.TabularInline):

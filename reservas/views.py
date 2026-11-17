@@ -134,7 +134,7 @@ def dispositivo_export(request):
     sheet.append(["Total ativo", resumo["ativo"]])
     sheet.append(["Total inativo", resumo["inativo"]])
     sheet.append([])
-    sheet.append(["Patrimônio", "Tipo", "Categoria", "ID", "Status"])
+    sheet.append(["Patrimônio", "Tipo", "Categoria", "ID", "Status", "Observação", "Comentários"])
     for dispositivo in dispositivos:
         sheet.append([
             dispositivo.numero_patrimonio or "",
@@ -142,6 +142,8 @@ def dispositivo_export(request):
             dispositivo.categoria.nome if dispositivo.categoria else "",
             dispositivo.numero_id or "",
             "Ativo" if dispositivo.ativo else "Inativo",
+            "Observação" if dispositivo.observacao else "",
+            dispositivo.comentarios or "",
         ])
     sheet.freeze_panes = "A6"
     for column in sheet.columns:
